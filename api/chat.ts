@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processKiraChat } from '../src/server/geminiService';
+import { processKiraChat } from './_geminiService';
 
 export const config = {
   maxDuration: 60,

@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { processKiraChat, transcribeAudio } from './src/server/geminiService';
+import { processKiraChat, transcribeAudio } from './api/_geminiService';
 
 dotenv.config();
 

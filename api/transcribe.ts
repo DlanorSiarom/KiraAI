@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { transcribeAudio } from '../src/server/geminiService';
+import { transcribeAudio } from './_geminiService';
 
 export const config = {
   maxDuration: 60,
