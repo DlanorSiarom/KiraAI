@@ -1,0 +1,8 @@
+{
+  "name": "Orb AI - Conversational Assistant with Adaptive Memory",
+  "description": "Uma IA de conversação limpa com interface de orbe fluido e sistema inteligente de memória adaptativa.",
+  "requestFramePermissions": [
+    "CAMERA_MICROPHONE"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

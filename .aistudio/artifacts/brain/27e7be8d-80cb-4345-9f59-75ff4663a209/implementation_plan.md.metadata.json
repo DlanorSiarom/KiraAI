@@ -1,0 +1,6 @@
+{
+  "summary": "Plano de implementação para refatoração estética do Orbe da Kira (plasma fluido iridescente com efeito vidro e aura holográfica), sistema híbrido de áudio e microfone com suporte universal cross-browser (Web Speech API + MediaRecorder com Gemini Transcribe), e arquitetura Serverless compatível 100% com deploy na Vercel (api/chat.ts, api/transcribe.ts e vercel.json).",
+  "updatedAt": "2026-10-15T16:11:58.020005290Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
