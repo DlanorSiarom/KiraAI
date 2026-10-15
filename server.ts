@@ -67,6 +67,24 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
   }
 });
 
+// Health check endpoint (shared logic with Vercel api/health.ts)
+app.get('/api/health', (_req: Request, res: Response) => {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY;
+
+  res.json({
+    status: apiKey ? 'ok' : 'missing_key',
+    hasApiKey: Boolean(apiKey),
+    timestamp: Date.now(),
+    message: apiKey
+      ? 'API da Kira conectada e chave Gemini detectada.'
+      : 'GEMINI_API_KEY não encontrada nas variáveis de ambiente.',
+  });
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {

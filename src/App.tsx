@@ -12,6 +12,9 @@ import {
   Waves,
   Eye,
   EyeOff,
+  AlertTriangle,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import { Orb } from './components/Orb';
 import { ResultSheet } from './components/ResultSheet';
@@ -27,7 +30,7 @@ import {
   getStoredUserName,
   setStoredUserName,
 } from './services/memoryStorage';
-import { sendChatMessage } from './services/api';
+import { sendChatMessage, checkApiHealth, ApiHealthStatus } from './services/api';
 import { audioRecorder, transcribeAudioDirectly } from './services/audioRecorder';
 // @ts-ignore
 import AeroShards from '../components/AeroShards.jsx';
@@ -57,6 +60,8 @@ export default function App() {
   const [isResultSheetOpen, setIsResultSheetOpen] = useState(false);
   const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [apiHealth, setApiHealth] = useState<ApiHealthStatus | null>(null);
   const [learnedNotification, setLearnedNotification] = useState<string | null>(null);
   const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -79,6 +84,15 @@ export default function App() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+
+  // Check backend Gemini API connectivity on mount
+  useEffect(() => {
+    checkApiHealth()
+      .then((status) => {
+        setApiHealth(status);
+      })
+      .catch(() => {});
+  }, []);
 
   // Initialize and keep Web Speech voices cache ready
   useEffect(() => {
@@ -523,17 +537,44 @@ export default function App() {
     } catch (err: any) {
       console.error('Falha ao enviar mensagem:', err);
       setOrbState('idle');
+
+      const errMsg = err?.message || 'Erro de rede';
+      const isKeyError =
+        errMsg.includes('GEMINI_API_KEY') ||
+        errMsg.includes('chave') ||
+        errMsg.includes('variáveis de ambiente') ||
+        errMsg.includes('Environment Variables');
+
+      const isQuotaError =
+        errMsg.includes('cota') ||
+        errMsg.includes('quota') ||
+        errMsg.includes('429');
+
+      let lead = 'Compreendi seu pedido';
+      let spokenSentence = 'Desculpe, ocorreu uma instabilidade na conexão. Por favor tente novamente.';
+      let content = `Desculpe, ocorreu uma instabilidade na conexão com a inteligência artificial. Por favor tente novamente.\n\n*Detalhes: ${errMsg}*`;
+
+      if (isKeyError) {
+        lead = 'Atenção à configuração da IA na Vercel';
+        spokenSentence = 'Minha mestra, a chave de inteligência artificial precisa ser configurada nas variáveis de ambiente da Vercel para que eu possa responder.';
+        content = `### Chave da IA não configurada na Vercel\n\n${errMsg}\n\n#### Como resolver na Vercel:\n1. Acesse seu painel em **[vercel.com](https://vercel.com)** e abra este projeto.\n2. Vá até a aba **Settings** > **Environment Variables**.\n3. Adicione uma variável com o nome **\`GEMINI_API_KEY\`** (ou **\`GOOGLE_API_KEY\`**) e cole sua chave de API do [Google AI Studio](https://aistudio.google.com/app/apikey).\n4. Vá na aba **Deployments**, clique nos três pontinhos do último deploy e selecione **Redeploy**.`;
+      } else if (isQuotaError) {
+        lead = 'Limite de cota temporário';
+        spokenSentence = 'Minha mestra, o limite temporário de requisições da cota da API foi atingido. Aguarde alguns instantes.';
+        content = `### Limite temporário da API atingido\n\n${errMsg}\n\nO plano gratuito do Gemini possui limites de requisições por minuto. Aguarde 30 a 60 segundos antes de fazer uma nova pergunta.`;
+      }
+
       const fallbackExchange: ChatExchange = {
         id: 'fallback-' + Date.now(),
         userMessage: query,
-        conversationalLead: 'Compreendi seu pedido',
-        mainContent: `Desculpe, ocorreu uma instabilidade momentânea na conexão. Por favor tente novamente. (${err.message || 'Erro de rede'})`,
+        conversationalLead: lead,
+        mainContent: content,
         cards: [],
         timestamp: Date.now(),
       };
       setCurrentExchange(fallbackExchange);
       setIsResultSheetOpen(true);
-      speakText(fallbackExchange.conversationalLead, fallbackExchange.mainContent, null);
+      speakText(fallbackExchange.conversationalLead, spokenSentence, null);
     }
   };
 
@@ -736,6 +777,21 @@ export default function App() {
 
       {/* Subtle notification when AI learns a new memory */}
       <AnimatePresence>
+        {apiHealth && !apiHealth.hasApiKey && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            onClick={() => setIsConfigModalOpen(true)}
+            className="absolute top-18 z-40 px-4 py-2.5 rounded-full bg-amber-950/90 backdrop-blur-md border border-amber-500/50 text-xs text-amber-200 shadow-xl flex items-center gap-2 cursor-pointer hover:bg-amber-900/90 transition-all max-w-lg"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">
+              GEMINI_API_KEY não configurada na Vercel. <strong>Clique para ver como conectar</strong>
+            </span>
+          </motion.div>
+        )}
+
         {learnedNotification && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -955,6 +1011,86 @@ export default function App() {
         }}
         onClearHistory={() => setHistory([])}
       />
+
+      {/* Vercel AI Connection Guidance Modal */}
+      <AnimatePresence>
+        {isConfigModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsConfigModalOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative z-10 w-full max-w-md bg-[#0d1224] border border-cyan-500/30 rounded-3xl p-6 shadow-2xl text-left"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                    <Sparkles className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-base font-semibold text-white">Como Conectar a IA na Vercel</h3>
+                </div>
+                <button
+                  onClick={() => setIsConfigModalOpen(false)}
+                  className="p-1 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4 text-xs leading-relaxed text-slate-300">
+                <p>
+                  Para a Kira responder e falar no deploy da <strong>Vercel</strong>, ela precisa da sua chave de API gratuita do Google Gemini:
+                </p>
+
+                <div className="space-y-2.5 p-3.5 rounded-2xl bg-white/5 border border-white/5">
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
+                    <p>Acesse o painel em <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5 font-medium">vercel.com <ExternalLink className="w-2.5 h-2.5" /></a> e abra este projeto.</p>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
+                    <p>Vá na aba <strong>Settings</strong> &gt; <strong>Environment Variables</strong>.</p>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
+                    <p>
+                      Adicione o nome da variável: <code className="px-1.5 py-0.5 rounded bg-black/60 text-cyan-300 font-mono text-[11px]">GEMINI_API_KEY</code><br />
+                      e cole sua chave do <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-cyan-400 underline inline-flex items-center gap-0.5 font-medium">Google AI Studio <ExternalLink className="w-2.5 h-2.5" /></a>.
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">4</span>
+                    <p>Vá na aba <strong>Deployments</strong>, clique nos três pontinhos do último deploy e selecione <strong>Redeploy</strong>.</p>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  Após o redeploy, a Kira estará totalmente conectada, pesquisando na internet, aprendendo memórias e falando em voz alta!
+                </p>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  onClick={() => setIsConfigModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition-colors cursor-pointer"
+                >
+                  Entendi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

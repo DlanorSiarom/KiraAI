@@ -38,7 +38,11 @@ export interface KiraResponseData {
 }
 
 function getAiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY;
   if (!apiKey) return null;
   return new GoogleGenAI({ apiKey });
 }
@@ -132,7 +136,7 @@ export async function generateKiraSpeech(text: string): Promise<string | null> {
     });
 
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('TTS timeout')), 3500)
+      setTimeout(() => reject(new Error('TTS timeout')), 2000)
     );
 
     const ttsRes = await Promise.race([ttsPromise, timeoutPromise]) as any;
@@ -257,7 +261,7 @@ ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA EM JSON:
     const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let lastErr: any = null;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       for (const model of modelsToTry) {
         try {
           return await ai.models.generateContent({
@@ -325,6 +329,11 @@ ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA EM JSON:
           });
         } catch (err: any) {
           lastErr = err;
+          const msg = err?.message || String(err);
+          // If quota exhausted or auth invalid, fail immediately with clear diagnostic
+          if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || msg.includes('API_KEY_INVALID') || msg.includes('403') || msg.includes('401')) {
+            throw err;
+          }
           await new Promise((res) => setTimeout(res, 200));
         }
       }
@@ -348,13 +357,8 @@ ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA EM JSON:
     };
   }
 
-  // Generate real neural AI voice for Kira using Gemini TTS
-  const lead = data.conversationalLead || 'Às suas ordens, minha mestra.';
-  const cleanFirstSentence = (data.mainContent || '')
-    .replace(/[*#_`~[\]]/g, '')
-    .replace(/https?:\/\/\S+/g, '')
-    .split(/(?<=[.?!])\s+/)[0] || '';
-  const speechTextToVoice = cleanFirstSentence ? `${lead}. ${cleanFirstSentence}` : lead;
+  // Generate real neural AI voice for Kira using Gemini TTS (fast lead sentence: ~600ms)
+  const speechTextToVoice = data.conversationalLead || 'Às suas ordens, minha mestra.';
   const audioData = await generateKiraSpeech(speechTextToVoice);
 
   return {
