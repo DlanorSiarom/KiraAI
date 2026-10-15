@@ -1,9 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { transcribeAudio } from './_geminiService';
+import { GoogleGenAI } from '@google/genai';
 
 export const config = {
   maxDuration: 60,
 };
+
+function getAiClient(): GoogleGenAI | null {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenAI({ apiKey });
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -23,12 +33,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  const ai = getAiClient();
+  if (!ai) {
+    return res.status(500).json({
+      error: 'GEMINI_API_KEY não configurada na Vercel.',
+      details: 'Acesse o painel da Vercel > Settings > Environment Variables e adicione a variável GEMINI_API_KEY.',
+    });
+  }
+
   try {
     let body = req.body;
     if (typeof body === 'string') {
       try {
         body = JSON.parse(body);
-      } catch (parseErr) {
+      } catch {
         return res.status(400).json({ error: 'JSON inválido no corpo da requisição.' });
       }
     }
@@ -39,19 +57,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Nenhum áudio fornecido para transcrição.' });
     }
 
-    const text = await transcribeAudio(audioBase64, mimeType);
-    return res.status(200).json({ success: true, text });
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+    let lastErr: any = null;
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: audioBase64,
+                  },
+                },
+                {
+                  text: 'Transcreva com precisão o que o usuário falou neste áudio em português. Retorne APENAS a transcrição textual pura das palavras faladas, sem explicações, sem aspas e sem saudações adicionais. Se não houver fala audível, retorne uma string vazia.',
+                },
+              ],
+            },
+          ],
+        });
+
+        const text = response.text?.trim() || '';
+        return res.status(200).json({ success: true, text });
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+
+    throw lastErr || new Error('Falha ao transcrever áudio.');
   } catch (error: any) {
     console.error('Erro na rota /api/transcribe:', error);
     const errMsg = error?.message || String(error);
 
-    let userFriendlyError = 'Falha ao transcrever áudio com Gemini.';
-    if (errMsg.includes('GEMINI_API_KEY')) {
-      userFriendlyError = 'A variável de ambiente GEMINI_API_KEY não está configurada na Vercel.';
-    }
-
     return res.status(500).json({
-      error: userFriendlyError,
+      error: 'Falha ao transcrever áudio com Gemini.',
       details: errMsg,
     });
   }

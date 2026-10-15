@@ -777,20 +777,6 @@ export default function App() {
 
       {/* Subtle notification when AI learns a new memory */}
       <AnimatePresence>
-        {apiHealth && !apiHealth.hasApiKey && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            onClick={() => setIsConfigModalOpen(true)}
-            className="absolute top-18 z-40 px-4 py-2.5 rounded-full bg-amber-950/90 backdrop-blur-md border border-amber-500/50 text-xs text-amber-200 shadow-xl flex items-center gap-2 cursor-pointer hover:bg-amber-900/90 transition-all max-w-lg"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="truncate">
-              GEMINI_API_KEY não configurada na Vercel. <strong>Clique para ver como conectar</strong>
-            </span>
-          </motion.div>
-        )}
 
         {learnedNotification && (
           <motion.div

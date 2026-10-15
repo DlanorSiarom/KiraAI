@@ -45,20 +45,20 @@ export async function checkApiHealth(): Promise<ApiHealthStatus> {
     if (!res.ok) {
       return {
         status: 'error',
-        hasApiKey: false,
+        hasApiKey: true, // Do not falsely report missing key if status is temporary error
         message: `Servidor retornou status ${res.status}.`,
       };
     }
     const data = await res.json();
     return {
       status: data.status || 'ok',
-      hasApiKey: Boolean(data.hasApiKey),
+      hasApiKey: data.status !== 'missing_key',
       message: data.message || '',
     };
   } catch (err: any) {
     return {
       status: 'error',
-      hasApiKey: false,
+      hasApiKey: true,
       message: 'Não foi possível conectar com o endpoint de saúde da API.',
     };
   }
